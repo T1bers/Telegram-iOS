@@ -15,6 +15,10 @@ public func makePrivacyAndSecurityController(context: AccountContext) -> ViewCon
     return privacyAndSecurityController(context: context, focusOnItemTag: PrivacyAndSecurityEntryTag.autoArchive)
 }
 
+public func makeAyuGramSettingsController(context: AccountContext) -> ViewController {
+    return ayuGramSettingsController(context: context)
+}
+
 public func makeBioPrivacyController(context: AccountContext, settings: Promise<AccountPrivacySettings?>, present: @escaping (ViewController) -> Void) {
     let signal = settings.get()
     |> take(1)

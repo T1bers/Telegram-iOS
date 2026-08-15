@@ -49,7 +49,7 @@ private final class AccountPresenceManagerImpl {
                 self.onlineTimer = nil
                 self.isPerformingUpdate.set(true)
                 self.currentRequestDisposable.set((self.network.request(Api.functions.account.updateStatus(offline: .boolTrue))
-                |> \catch\ { _ -> Signal<Api.Bool, NoError> in
+                |> `catch` { _ -> Signal<Api.Bool, NoError> in
                     return .single(.boolFalse)
                 }
                 |> deliverOn(self.queue)).start(completed: { [weak self] in

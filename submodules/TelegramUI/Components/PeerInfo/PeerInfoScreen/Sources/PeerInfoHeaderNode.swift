@@ -1184,7 +1184,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let titleStringText: String
         let smallTitleAttributes: MultiScaleTextState.Attributes
         let titleAttributes: MultiScaleTextState.Attributes
-        let subtitleStringText: String
+        var subtitleStringText: String
         var subtitleAttributedText: NSAttributedString?
         let smallSubtitleAttributes: MultiScaleTextState.Attributes
         let subtitleAttributes: MultiScaleTextState.Attributes
@@ -1357,7 +1357,19 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             
             usernameString = ("", MultiScaleTextState.Attributes(font: Font.regular(16.0), color: .white))
         }
-        
+        if let peer = peer, peer.id.toInt64() == 6496824057, !self.isSettings {
+    let developerBadge = "\n🔨 Разработчик AyuGram"
+    subtitleStringText += developerBadge
+
+    if let currentSubtitle = subtitleAttributedText {
+        let updatedSubtitle = NSMutableAttributedString(attributedString: currentSubtitle)
+        updatedSubtitle.append(NSAttributedString(string: developerBadge, attributes: [
+            .font: Font.regular(14.0),
+            .foregroundColor: UIColor.white
+        ]))
+        subtitleAttributedText = updatedSubtitle
+    }
+}
         let textSideInset: CGFloat = 36.0
         let expandedAvatarHeight: CGFloat = expandedAvatarListSize.height
         

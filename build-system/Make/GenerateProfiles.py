@@ -99,11 +99,11 @@ def get_certificate_base64_from_p12(p12_path, p12_password=''):
 
 
 def process_provisioning_profile(source, destination, certificate_data, signing_identity, keychain_name):
-    parsed_plist = run_executable_with_output('security', arguments=['cms', '-D', '-i', source], check_result=True)
+    parsed_p
+list = run_executable_with_output('security', arguments=['cms', '-D', '-i', source], check_result=True)
     parsed_plist_file = tempfile.mktemp()
     with open(parsed_plist_file, 'w+') as file:
-        file.write(parsed_plist)
-            with open(parsed_plist_file, 'rb') as file:
+    with open(parsed_plist_file, 'rb') as file:
         profile = plistlib.load(file)
 
     profile['ExpirationDate'] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(days=3650)

@@ -46,7 +46,7 @@ def import_certificates(certificatesPath):
     for file_name in os.listdir(certificatesPath):
         file_path = os.path.join(certificatesPath, file_name)
 
-        if file_path.endswith('.p12') or file_path.endswith('.cer'):
+        if file_path.endswith('.p12'):
             print('Importing certificate: {}'.format(file_name))
 
             run_executable_with_output(

@@ -1045,7 +1045,6 @@ if __name__ == '__main__':
         action='store_true',
         default=False,
     )
-    )
     buildParser.add_argument(
         '--configuration',
         choices=[

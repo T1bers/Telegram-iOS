@@ -99,27 +99,24 @@ def get_certificate_base64_from_p12(p12_path, p12_password=''):
 
 
 def process_provisioning_profile(source, destination, certificate_data, signing_identity, keychain_name):
-    parsed_p
-list = run_executable_with_output('security', arguments=['cms', '-D', '-i', source], check_result=True)
-parsed_plist_file = tempfile.mktemp()
-with open(parsed_plist_file, 'w+') as file:
-    file.write(parsed_plist)
+    parsed_plist = run_executable_with_output('security', arguments=['cms', '-D', '-i', source], check_result=True)
+    parsed_plist_file = tempfile.mktemp()
 
-with open(parsed_plist_file, 'rb') as file:
-    profile = plistlib.load(file)
+    with open(parsed_plist_file, 'w+') as file:
+        file.write(parsed_plist)
 
-profile['ExpirationDate'] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(days=3650)
+    with open(parsed_plist_file, 'rb') as file:
+        profile = plistlib.load(file)
 
-with open(parsed_plist_file, 'wb') as file:
-    plistlib.dump(profile, file)
+    profile['ExpirationDate'] = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(days=3650)
 
-# Remove all existing developer certificates
+    with open(parsed_plist_file, 'wb') as file:
+        plistlib.dump(profile, file)
 
     # Remove all existing developer certificates
     while True:
         result = run_executable_with_output('plutil', arguments=['-remove', 'DeveloperCertificates.0', parsed_plist_file], check_result=False)
         if result is None or 'Could not' in str(result) or result == '':
-            # Check if the removal actually failed by trying to extract
             check = run_executable_with_output('plutil', arguments=['-extract', 'DeveloperCertificates.0', 'raw', parsed_plist_file], check_result=False)
             if check is None or 'Could not' in str(check):
                 break

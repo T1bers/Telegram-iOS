@@ -47,6 +47,11 @@ jobs:
           echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
 
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+                    echo "=== SIGNING IDENTITIES ==="
+          security find-identity -v -p codesigning
+
+          echo "=== INTENTS PROFILE CERTIFICATES ==="
+          security cms -D -i build-system/fake-codesigning-generated/profiles/Intents.mobileprovision | python3 -c 'import plistlib,sys,hashlib; p=plistlib.load(sys.stdin.buffer); print("\n".join(hashlib.sha1(c).hexdigest().upper() for c in p.get("DeveloperCertificates", [])))'
 
           python3 -u build-system/Make/Make.py \
             generate-verification-profiles \

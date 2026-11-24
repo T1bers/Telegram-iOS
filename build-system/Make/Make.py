@@ -1040,10 +1040,11 @@ if __name__ == '__main__':
         metavar='number'
     )
     add_project_and_build_common_arguments(buildParser)   
-        buildParser.add_argument(
+    buildParser.add_argument(
         '--disableProvisioningProfiles',
         action='store_true',
         default=False,
+    )
     )
     buildParser.add_argument(
         '--configuration',

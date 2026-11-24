@@ -52,8 +52,10 @@ jobs:
             generate-verification-profiles \
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath="build-system/fake-codesigning" \
---destination="build-system/fake-codesigning-generated/profiles"
-
+            --destination="build-system/fake-codesigning-generated/profiles"
+            mkdir -p build-system/fake-codesigning-generated/certs
+            cp -R build-system/fake-codesigning/certs/. build-system/fake-codesigning-generated/certs/
+          
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \

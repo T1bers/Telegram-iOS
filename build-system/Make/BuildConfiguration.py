@@ -191,7 +191,7 @@ def copy_profiles_from_directory(source_path, destination_path, team_id, bundle_
                     print('Warning: skipping provisioning profile at {} with bundle_id {} (base_name {})'.format(file_path, profile_name, profile_base_name))
 
 
-def resolve_aps_environment_from_directory(source_path, team_id, bundle_id):
+def resolve_aps_environment_from_directory(source_path, team_id, bundle_id, allow_missing=False):
     for file_name in os.listdir(source_path):
         file_path = source_path + '/' + file_name
         if os.path.isfile(file_path):
@@ -215,11 +215,12 @@ def resolve_aps_environment_from_directory(source_path, team_id, bundle_id):
                 profile_base_name = profile_name[len(team_id + '.' + bundle_id):]
                 if profile_base_name == '':
                     if 'aps-environment' not in profile_dict['Entitlements']:
+                        if allow_missing:
+                            return 'development'
                         print('Provisioning profile at {} does not include an aps-environment entitlement'.format(file_path))
                         sys.exit(1)
                     return profile_dict['Entitlements']['aps-environment']
-    return None
-
+    return 'development' if allow_missing else None
 
 def copy_certificates_from_directory(source_path, destination_path):
     for file_name in os.listdir(source_path):

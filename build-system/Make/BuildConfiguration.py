@@ -319,7 +319,6 @@ class DirectoryCodesigningSource(CodesigningSource):
             bundle_id=self.bundle_id,
             allow_missing=self.directory_path.endswith('fake-codesigning')
         )
-    )
 
     def use_xcode_managed_codesigning(self):
         return False

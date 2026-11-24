@@ -25,17 +25,18 @@ jobs:
         run: |
           set -x
           sudo mkdir -p /Users/Shared
-          cp -R $GITHUB_WORKSPACE /Users/Shared/
-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
+          cp -R "$GITHUB_WORKSPACE" /Users/Shared/
+          mv "/Users/Shared/$(basename "$GITHUB_WORKSPACE")" /Users/Shared/telegram-ios
 
       - name: Build the App
         run: |
+          set -e
           set -x
 
           SOURCE_DIR=/Users/Shared/telegram-ios
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
 
-          cd $SOURCE_DIR
+          cd "$SOURCE_DIR"
 
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
 
@@ -44,10 +45,15 @@ jobs:
           export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
           export BUILD_NUMBER="$COMMIT_COUNT"
 
-          echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
-          echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
 
-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+          echo "===== IMPORT CERTIFICATES ====="
+
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/fake-codesigning/certs
+
+          echo "===== GENERATE PROVISIONING PROFILES ====="
 
           python3 -u build-system/Make/Make.py \
             generate-verification-profiles \
@@ -56,13 +62,109 @@ jobs:
             --destination="build-system/fake-codesigning-generated/profiles"
 
           mkdir -p build-system/fake-codesigning-generated/certs
-          cp -R build-system/fake-codesigning/certs/. build-system/fake-codesigning-generated/certs/
 
-          echo "=== SIGNING IDENTITIES ==="
-          security find-identity -v -p codesigning
+          cp -R build-system/fake-codesigning/certs/. \
+            build-system/fake-codesigning-generated/certs/
 
-          echo "=== INTENTS PROFILE CERTIFICATES ==="
-          security cms -D -i build-system/fake-codesigning-generated/profiles/Intents.mobileprovision | python3 -c 'import plistlib,sys,hashlib; p=plistlib.load(sys.stdin.buffer); print("\n".join(hashlib.sha1(c).hexdigest().upper() for c in p.get("DeveloperCertificates", [])))'
+          echo "===== SIGNING PREFLIGHT CHECK ====="
+
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import plistlib
+          import re
+          import subprocess
+          import sys
+
+          result = subprocess.run(
+              ["security", "find-identity", "-v", "-p", "codesigning"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True
+          )
+
+          print(result.stdout)
+
+          if result.returncode != 0:
+              sys.exit("ERROR: Cannot read signing identities")
+
+          identities = set()
+
+          for line in result.stdout.splitlines():
+              if re.match(r"\s*\d+\)", line):
+                  match = re.search(r"\b[0-9A-Fa-f]{40}\b", line)
+                  if match:
+                      identities.add(match.group(0).upper())
+
+          if not identities:
+              sys.exit("ERROR: No valid code-signing identities found")
+
+          profiles_dir = pathlib.Path(
+              "build-system/fake-codesigning-generated/profiles"
+          )
+
+          profiles = sorted(profiles_dir.glob("*.mobileprovision"))
+
+          if not profiles:
+              sys.exit("ERROR: No provisioning profiles found")
+
+          errors = []
+
+          for profile_path in profiles:
+              decoded = subprocess.run(
+                  ["security", "cms", "-D", "-i", str(profile_path)],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE
+              )
+
+              if decoded.returncode != 0:
+                  errors.append(
+                      profile_path.name + ": cannot decode profile"
+                  )
+                  continue
+
+              try:
+                  profile = plistlib.loads(decoded.stdout)
+              except Exception as error:
+                  errors.append(
+                      profile_path.name + ": " + str(error)
+                  )
+                  continue
+
+              certificates = profile.get("DeveloperCertificates", [])
+
+              if not certificates:
+                  errors.append(
+                      profile_path.name + ": no certificates"
+                  )
+                  continue
+
+              for certificate in certificates:
+                  fingerprint = hashlib.sha1(
+                      certificate
+                  ).hexdigest().upper()
+
+                  if fingerprint not in identities:
+                      errors.append(
+                          profile_path.name +
+                          ": certificate does not match an available identity: " +
+                          fingerprint
+                      )
+
+              print("CHECKED:", profile_path.name)
+
+          if errors:
+              print("\nSIGNING PREFLIGHT FAILED:")
+              for error in errors:
+                  print(" -", error)
+              sys.exit(1)
+
+          print(
+              "\nSUCCESS: All provisioning profiles match valid signing identities."
+          )
+          PY
+
+          echo "===== START BAZEL BUILD ====="
 
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
@@ -73,6 +175,7 @@ jobs:
             --buildNumber="$BUILD_NUMBER"
 
           OUTPUT_PATH="build/artifacts"
+
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
 

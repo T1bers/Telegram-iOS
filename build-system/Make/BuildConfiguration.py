@@ -313,7 +313,12 @@ class DirectoryCodesigningSource(CodesigningSource):
         copy_profiles_from_directory(source_path=self.directory_path + '/profiles', destination_path=destination_path, team_id=self.team_id, bundle_id=self.bundle_id)
 
     def resolve_aps_environment(self):
-        return resolve_aps_environment_from_directory(source_path=self.directory_path + '/profiles', team_id=self.team_id, bundle_id=self.bundle_id)
+    return resolve_aps_environment_from_directory(
+        source_path=self.directory_path + '/profiles',
+        team_id=self.team_id,
+        bundle_id=self.bundle_id,
+        allow_missing=self.directory_path.endswith('fake-codesigning')
+    )
 
     def use_xcode_managed_codesigning(self):
         return False

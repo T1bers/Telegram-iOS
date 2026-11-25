@@ -201,10 +201,7 @@ jobs:
 
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
-
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" "$OUTPUT_PATH/"
-          done
+          cp bazel-bin/Telegram/Telegram.ipa "$OUTPUT_PATH/"
 
           mkdir -p build/DSYMs
 

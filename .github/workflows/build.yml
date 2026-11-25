@@ -100,7 +100,7 @@ jobs:
           import sys
 
           result = subprocess.run(
-              ["security", "find-identity", "-v", "-p", "codesigning"],
+              ["security", "find-identity", "-p", "codesigning"],
               stdout=subprocess.PIPE,
               stderr=subprocess.STDOUT,
               text=True

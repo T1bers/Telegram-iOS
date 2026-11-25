@@ -205,7 +205,7 @@ jobs:
 
           mkdir -p build/DSYMs
 
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+          for f in bazel-bin/Telegram/*.dSYM; do
             cp -R "$f" build/DSYMs/
           done
 

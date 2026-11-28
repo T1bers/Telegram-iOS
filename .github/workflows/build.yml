@@ -195,7 +195,6 @@ jobs:
             --configurationPath="build-system/appstore-configuration.json" \
             --codesigningInformationPath=build-system/fake-codesigning-generated \
             --configuration=release_arm64 \
-            --disableProvisioningProfiles \
             --buildNumber="$BUILD_NUMBER"
 
           OUTPUT_PATH="build/artifacts"
@@ -203,32 +202,6 @@ jobs:
           rm -rf "$OUTPUT_PATH"
           mkdir -p "$OUTPUT_PATH"
           cp bazel-bin/Telegram/Telegram.ipa "$OUTPUT_PATH/"
-
-          echo "===== VERIFY SIDeload IPA ====="
-          python3 - <<'PY'
-          import sys
-          import zipfile
-
-          ipa_path = "build/artifacts/Telegram.ipa"
-          with zipfile.ZipFile(ipa_path) as ipa:
-              profiles = [
-                  name for name in ipa.namelist()
-                  if name.endswith("embedded.mobileprovision")
-              ]
-              if profiles:
-                  print("ERROR: provisioning profiles are still embedded:")
-                  for name in profiles:
-                      print(" -", name)
-                  sys.exit(1)
-              app = next(
-                  (name for name in ipa.namelist()
-                   if name.startswith("Payload/") and name.endswith(".app/Info.plist")),
-                  None
-              )
-              if app is None:
-                  sys.exit("ERROR: Payload app Info.plist is missing")
-              print("Verified: IPA contains an app and no embedded provisioning profiles.")
-          PY
 
           mkdir -p build/DSYMs
 
@@ -252,7 +225,7 @@ jobs:
           name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
           target_commitish: ${{ github.sha }}
           body: |
-            Unsigned-for-sideloading build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }}). No provisioning profiles are embedded; sign the IPA with a valid device-compatible certificate/profile before installing.
+            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
           draft: false
           prerelease: false
           files: |

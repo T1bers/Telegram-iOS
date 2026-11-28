@@ -317,7 +317,7 @@ class DirectoryCodesigningSource(CodesigningSource):
             source_path=self.directory_path + '/profiles',
             team_id=self.team_id,
             bundle_id=self.bundle_id,
-            allow_missing=self.directory_path.endswith('fake-codesigning')
+            allow_missing=os.path.basename(os.path.normpath(self.directory_path)).startswith('fake-codesigning')
         )
 
     def use_xcode_managed_codesigning(self):

@@ -510,13 +510,21 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         shutil.rmtree(provisioning_path)
     os.makedirs(provisioning_path, exist_ok=True)
 
-    codesigning_data = resolve_codesigning(
-        arguments=arguments,
-        base_path=base_path,
-        build_configuration=build_configuration,
-        provisioning_profiles_path=provisioning_path,
-        additional_codesigning_output_path=additional_codesigning_output_path
-    )
+    if arguments.disableProvisioningProfiles:
+        # Sideloading builds are signed by the end-user's on-device signer.
+        # Do not import synthetic profiles or certificates into the IPA.
+        codesigning_data = ResolvedCodesigningData(
+            aps_environment='development',
+            use_xcode_managed_codesigning=False
+        )
+    else:
+        codesigning_data = resolve_codesigning(
+            arguments=arguments,
+            base_path=base_path,
+            build_configuration=build_configuration,
+            provisioning_profiles_path=provisioning_path,
+            additional_codesigning_output_path=additional_codesigning_output_path
+        )
     if codesigning_data.aps_environment is None:
         print('Could not find a valid aps-environment entitlement in the provided provisioning profiles')
         sys.exit(1)

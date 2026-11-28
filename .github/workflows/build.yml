@@ -2,9 +2,8 @@ name: CI
 
 on:
   push:
-    branches:
-      - master
-      - ayugram-developer-badge
+    branches: [ master, ayugram-developer-badge ]
+
   workflow_dispatch:
 
 permissions:
@@ -16,94 +15,217 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 0
+          submodules: 'recursive'
+          fetch-depth: '0'
 
       - name: Set active Xcode path
-        shell: bash
         run: |
-          set -euo pipefail
-          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          set -e
+          XCODE_VERSION=$(python3 -c 'import json;print(json.load(open("versions.json"))["xcode"])')
           XCODE_APP="/Applications/Xcode_${XCODE_VERSION}.app"
-          if [[ ! -d "$XCODE_APP" ]]; then
-            XCODE_APP="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+
+          echo "Requested Xcode: $XCODE_VERSION"
+          echo "Installed Xcode versions:"
+          ls -d /Applications/Xcode* || true
+
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "WARNING: $XCODE_APP not found, trying the newest Xcode 26.x"
+            XCODE_APP=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1)
           fi
-          if [[ -z "$XCODE_APP" || ! -d "$XCODE_APP" ]]; then
-            echo "No suitable Xcode installation found"
+
+          if [ -z "$XCODE_APP" ] || [ ! -d "$XCODE_APP" ]; then
+            echo "ERROR: no suitable Xcode found on this runner"
             exit 1
           fi
+
+          echo "Using: $XCODE_APP"
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           xcodebuild -version
 
       - name: Create canonical source directory
-        shell: bash
         run: |
-          set -euo pipefail
+          set -x
           sudo mkdir -p /Users/Shared
-          sudo rm -rf /Users/Shared/telegram-ios
-          cp -R "$GITHUB_WORKSPACE" /Users/Shared/telegram-ios
+          cp -R "$GITHUB_WORKSPACE" /Users/Shared/
+          mv "/Users/Shared/$(basename "$GITHUB_WORKSPACE")" /Users/Shared/telegram-ios
 
-      - name: Build unsigned IPA for sideloading
-        shell: bash
+      - name: Build the App
         run: |
-          set -euo pipefail
-          cd /Users/Shared/telegram-ios
+          set -e
+          set -x
+
+          SOURCE_DIR=/Users/Shared/telegram-ios
           BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
+
+          cd "$SOURCE_DIR"
+
           BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
-          APP_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')"
-          COMMIT_COUNT="$(git rev-list --count HEAD)"
-          BUILD_NUMBER="$((COMMIT_COUNT + BUILD_NUMBER_OFFSET))"
+
+          export APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["app"]);')
+          export COMMIT_COUNT=$(git rev-list --count HEAD)
+          export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
+          export BUILD_NUMBER="$COMMIT_COUNT"
+
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+
+          echo "===== IMPORT CERTIFICATES ====="
+
+          python3 build-system/Make/ImportCertificates.py \
+            --path build-system/fake-codesigning/certs
+
+          echo "===== GENERATE PROVISIONING PROFILES ====="
+
+          python3 -u build-system/Make/Make.py \
+            generate-verification-profiles \
+            --configurationPath="build-system/appstore-configuration.json" \
+            --codesigningInformationPath="build-system/fake-codesigning" \
+            --destination="build-system/fake-codesigning-generated/profiles"
+
+          mkdir -p build-system/fake-codesigning-generated/certs
+
+          cp -R build-system/fake-codesigning/certs/. \
+            build-system/fake-codesigning-generated/certs/
+
+          echo "===== SIGNING PREFLIGHT CHECK ====="
+
+          python3 - <<'PY'
+          import hashlib
+          import pathlib
+          import plistlib
+          import re
+          import subprocess
+          import sys
+
+          result = subprocess.run(
+              ["security", "find-identity", "-p", "codesigning"],
+              stdout=subprocess.PIPE,
+              stderr=subprocess.STDOUT,
+              text=True
+          )
+
+          print(result.stdout)
+
+          if result.returncode != 0:
+              sys.exit("ERROR: Cannot read signing identities")
+
+          identities = set()
+
+          for line in result.stdout.splitlines():
+              if re.match(r"\\s*\\d+\\)", line):
+                  match = re.search(r"\\b[0-9A-Fa-f]{40}\\b", line)
+                  if match:
+                      identities.add(match.group(0).upper())
+
+          if not identities:
+              sys.exit("ERROR: No valid code-signing identities found")
+
+          profiles_dir = pathlib.Path(
+              "build-system/fake-codesigning-generated/profiles"
+          )
+
+          profiles = sorted(profiles_dir.glob("*.mobileprovision"))
+
+          if not profiles:
+              sys.exit("ERROR: No provisioning profiles found")
+
+          errors = []
+
+          for profile_path in profiles:
+              decoded = subprocess.run(
+                  ["security", "cms", "-D", "-i", str(profile_path)],
+                  stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE
+              )
+
+              if decoded.returncode != 0:
+                  errors.append(
+                      profile_path.name + ": cannot decode profile"
+                  )
+                  continue
+
+              try:
+                  profile = plistlib.loads(decoded.stdout)
+              except Exception as error:
+                  errors.append(
+                      profile_path.name + ": " + str(error)
+                  )
+                  continue
+
+              certificates = profile.get("DeveloperCertificates", [])
+
+              if not certificates:
+                  errors.append(
+                      profile_path.name + ": no certificates"
+                  )
+                  continue
+
+              for certificate in certificates:
+                  fingerprint = hashlib.sha1(
+                      certificate
+                  ).hexdigest().upper()
+
+                  if fingerprint not in identities:
+                      errors.append(
+                          profile_path.name +
+                          ": certificate does not match an available identity: " +
+                          fingerprint
+                      )
+
+              print("CHECKED:", profile_path.name)
+
+          if errors:
+              print("\\nSIGNING PREFLIGHT FAILED:")
+              for error in errors:
+                  print(" -", error)
+              sys.exit(1)
+
+          print(
+              "\\nSUCCESS: All provisioning profiles match valid signing identities."
+          )
+          PY
+
+          echo "===== START BAZEL BUILD ====="
 
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$BAZEL_USER_ROOT" \
             build \
             --configurationPath="build-system/appstore-configuration.json" \
-            --disableProvisioningProfiles \
+            --codesigningInformationPath=build-system/fake-codesigning-generated \
             --configuration=release_arm64 \
             --buildNumber="$BUILD_NUMBER"
 
           OUTPUT_PATH="build/artifacts"
-          mkdir -p "$OUTPUT_PATH" build/DSYMs
-          cp bazel-bin/Telegram/Telegram.ipa "$OUTPUT_PATH/Telegram.ipa"
 
-          if unzip -Z1 "$OUTPUT_PATH/Telegram.ipa" | grep -q 'embedded.mobileprovision'; then
-            echo "Provisioning profile unexpectedly embedded in IPA"
-            exit 1
-          fi
-          if ! unzip -Z1 "$OUTPUT_PATH/Telegram.ipa" | grep -qE '^Payload/[^/]+\.app/'; then
-            echo "IPA payload is missing"
-            exit 1
-          fi
-          echo "IPA verification passed"
+          rm -rf "$OUTPUT_PATH"
+          mkdir -p "$OUTPUT_PATH"
+          cp bazel-bin/Telegram/Telegram.ipa "$OUTPUT_PATH/"
+
+          mkdir -p build/DSYMs
 
           for f in bazel-bin/Telegram/*.dSYM; do
-            if [[ -e "$f" ]]; then
-              cp -R "$f" build/DSYMs/
-            fi
+            cp -R "$f" build/DSYMs/
           done
-          zip -qr "$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs
 
-      - name: Upload IPA artifact
+          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
+
+      - name: Upload IPA as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Telegram-ipa
           path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
           if-no-files-found: error
 
-      - name: Create release
+      - name: Create Release and upload files
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ env.BUILD_NUMBER }}
           name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
           target_commitish: ${{ github.sha }}
           body: |
-            Unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }}).
-            Sign the IPA on your device before installing.
+            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
           draft: false
           prerelease: false
           files: |

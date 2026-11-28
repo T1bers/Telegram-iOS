@@ -114,8 +114,8 @@ jobs:
           identities = set()
 
           for line in result.stdout.splitlines():
-              if re.match(r"\\s*\\d+\\)", line):
-                  match = re.search(r"\\b[0-9A-Fa-f]{40}\\b", line)
+              if re.match(r"\s*\d+\)", line):
+                  match = re.search(r"\b[0-9A-Fa-f]{40}\b", line)
                   if match:
                       identities.add(match.group(0).upper())
 

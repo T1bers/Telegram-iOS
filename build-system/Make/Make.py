@@ -843,7 +843,8 @@ def add_codesigning_common_arguments(current_parser: argparse.ArgumentParser):
         metavar='path'
     )
 
-    codesigning_group = current_parser.add_mutually_exclusive_group(required=True)
+    # Profile-free sideload builds do not need a signing source.
+    codesigning_group = current_parser.add_mutually_exclusive_group(required=False)
     codesigning_group.add_argument(
         '--gitCodesigningRepository',
         help='''

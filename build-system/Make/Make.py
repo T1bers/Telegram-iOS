@@ -510,7 +510,7 @@ def resolve_configuration(base_path, bazel_command_line: BazelCommandLine, argum
         shutil.rmtree(provisioning_path)
     os.makedirs(provisioning_path, exist_ok=True)
 
-    if arguments.disableProvisioningProfiles:
+    if getattr(arguments, 'disableProvisioningProfiles', False):
         # Sideloading builds are signed by the end-user's on-device signer.
         # Do not import synthetic profiles or certificates into the IPA.
         codesigning_data = ResolvedCodesigningData(
